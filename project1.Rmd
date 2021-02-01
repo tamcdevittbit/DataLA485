@@ -1,0 +1,78 @@
+---
+title: "Project#1"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(GGally)
+
+traninglab <- read.csv("./trainingsetlabels.csv")
+
+traningval <-read.csv("./trainingsetvalues.csv")
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+```{r}
+# preliminary view
+datset <- tibble(merge(traninglab, traningval,by="id"))
+glimpse(datset)
+head(datset)
+
+# Does merge look the same as problem description dashboard
+datset %>%
+ggplot(., aes(x=status_group)) +
+  geom_histogram(stat = "count",aes(fill=status_group))
+
+
+
+datset %>%
+ggplot(., aes(x=status_group)) +
+  geom_density(aes(fill=status_group), alpha=0.5)
+
+# no overlap between functional and non-functional 
+datset <- datset %>%
+  dplyr::select(-c('scheme_name','recorded_by','longitude',
+                   'latitude','region_code','district_code',
+                   'extraction_type','extraction_type_group','quantity_group','source_type',
+                   'waterpoint_type_group'))%>%
+  na.omit()
+
+str(datset)
+
+summary(datset) 
+
+TestA<- filter(datset,amount_tsh==0)
+Test1<- dplyr::select(TestA,status_group, ward, source, waterpoint_type)
+Test1<- Test1%>%group_by(status_group)%>% tally()  
+Test2 <- datset%>%group_by(status_group)%>% tally()
+Test1  
+Test2
+Test3 <-merge(Test2,Test1,by='status_group')
+
+Test4 <- filter(TestA,source_class=='groundwater') 
+Test4 <-Test4%>%group_by(status_group)%>% tally() 
+
+Test3 <-merge(Test3,Test4,by='status_group')
+
+Test3$n.y/Test3$n.x
+Test3$n/Test3$n.x
+ggcorr(datset[,2:30])
+
+
+lapply(datset[setdiff(names(datset),"status_group")], 
+    function(x)chisq.test(x,datset$status_group)$p.value)
+```
+
+
+
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
