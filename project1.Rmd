@@ -12,9 +12,10 @@ library(tidyverse)
 library(tidymodels)
 library(GGally)
 
-traninglab <- read.csv("./trainingsetlabels.csv")
+traninglab <- read.csv("./trainingsetlabels.csv",header = TRUE,stringsAsFactors = FALSE)
 
-traningval <-read.csv("./trainingsetvalues.csv")
+traningval <-read.csv("./trainingsetvalues.csv",header = TRUE,stringsAsFactors = FALSE)
+
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
@@ -24,6 +25,62 @@ Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by press
 datset <- tibble(merge(traninglab, traningval,by="id"))
 glimpse(datset)
 head(datset)
+
+
+# no empty cases
+length(unique(datset$id)) - sum(complete.cases(datset))
+
+# fill in blank cells with NA
+datset[,][datset[,]==""] <-NA
+
+# count the number NAs in datset
+sum(is.na(datset))
+
+# ~ 1.9 percent of cells are NA
+sum(is.na(datset))/ (59400*41)
+
+# sums by status
+sum(datset$status_group=="functional")
+sum(datset$status_group=="non functional")
+sum(datset$status_group=="functional needs repair")
+
+# no NAs in this column
+sum(datset$status_group=="NA")
+
+# percent by status
+sum(datset$status_group=="functional")/59400
+sum(datset$status_group=="non functional")/59400
+sum(datset$status_group=="functional needs repair")/59400
+
+
+map(datset,~sum(is.na(.)))
+# all NAs are in categorical variables sum = 49094
+
+```
+ Columns with given number of NAs in each column
+$funder
+[1] 3635
+$installer
+[1] 3655
+$subvillage
+[1] 371
+$public_meeting
+[1] 3334
+$scheme_name
+[1] 28166
+$scheme_management
+[1] 3877
+$permit
+[1] 3056
+
+
+```{r}
+library(dwtools)
+
+# figure out the number of unique entries per variable 
+tabl1 <- map(datset, ~str_c(length(unique(.x)),collapse=',')) %>%
+      bind_rows() %>%
+      gather(key = col_name, value= col_unique)
 
 # Does merge look the same as problem description dashboard
 datset %>%
