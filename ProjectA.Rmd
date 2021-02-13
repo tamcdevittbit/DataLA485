@@ -1,0 +1,219 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r - Initalization}
+library(tidyverse)
+library(tidymodels)
+library(GGally)
+library(reshape2)
+library(randomForest)
+library(rsample)
+
+traninglab <- read.csv("./trainingsetlabels.csv",header = TRUE,stringsAsFactors = FALSE)
+
+traningval <-read.csv("./trainingsetvalues.csv",header = TRUE,stringsAsFactors = FALSE)
+
+```
+
+
+```{r -Explority Data Analysis}
+datset <- tibble(merge(traninglab, traningval,by="id"))
+
+head(datset)
+
+# 41 variables list as int,num or chr. 59,400 observations
+str(datset)
+
+# no blank observations
+length(unique(datset$id)) - sum(complete.cases(datset))
+
+# 4609 blank cells in datset
+sum(datset=="")
+
+# replace blanks with NAs
+datset[,][datset[,]==""] <-NA
+
+# count the number NAs in datset (46094)
+sum(is.na(datset))
+
+# percent of NAs by number of cells 1.892667
+46094/(41*59400) *100
+
+# list the variables that the NAs fall under
+map(datset,~sum(is.na(.)))
+
+unique<-datset%>%
+ map(., ~str_c(length(unique(.x)),collapse=',')) %>%
+  bind_rows() %>%
+  gather(key = col_name, value= col_unique)
+
+# large percentage of NAs in $scheme_name (~47.4%)
+ 28166/59400 *100
+
+# datset%>%
+#   mutate(funder=replace_na(funder,"other"))%>%
+#   map(., ~str_c(length(unique(.x)),collapse=',')) %>%
+#   bind_rows() %>%
+#   gather(key = col_name, value= col_unique)
+
+# plot status_group by count
+datset %>%
+  ggplot(., aes(x=status_group)) +
+  geom_histogram(stat = "count",aes(fill=status_group))
+```
+Columns with given number of NAs in each column
+$funder
+[1] 3635
+$installer
+[1] 3655
+$subvillage
+[1] 371
+$public_meeting
+[1] 3334
+$scheme_name
+[1] 28166
+$scheme_management
+[1] 3877
+$permit
+[1] 3056
+
+```{r -Explority Graphs}
+# plot status_group by count
+datset %>%
+  ggplot(., aes(x=status_group)) +
+  geom_histogram(stat = "count",aes(fill=status_group))
+
+datset%>%
+  group_by(payment_type) %>%
+  summarise(status_group)%>%
+  ggplot( aes(x=payment_type)) +
+  geom_histogram(stat="count", aes(fill=status_group))+
+  theme(axis.text.x = element_text(angle=90))
+
+datset%>%
+  group_by(basin) %>%
+  summarise(status_group)%>%
+  ggplot( aes(x=basin)) +
+  geom_histogram(stat="count", aes(fill=status_group))+
+  theme(axis.text.x = element_text(angle=90))
+
+datset%>% 
+  group_by(basin)%>%
+  ggplot(aes(x=basin))+
+  geom_point(aes(y= amount_tsh,color=status_group))+
+  theme(axis.text.x = element_text(angle=90))
+
+ datset%>%
+  group_by(basin)%>%
+  ggplot(aes(x=basin))+
+  geom_point(aes(y= gps_height,color=status_group))+
+  theme(axis.text.x = element_text(angle=90))
+ 
+```
+
+
+```{r -Quality review for commonality}
+# Shows duplicate data with slightly different labels, quality_group being a subset of water_quality
+datset%>%
+  select(water_quality,quality_group)%>%
+  table()
+
+```
+
+
+```{r -Sorces review of commonality}
+# Source is most granular with sources_type and source_class being subsets
+datset%>%
+  select(source,source_type)%>%
+  table()
+  
+datset%>%
+  select(source,source_class)%>%
+  table()
+
+datset %>%
+  select(source_type,source_class) %>%
+  table
+
+
+```
+
+
+```{r -data wrangling}
+# remove the variables that are duplicate, subsets, or not used in analysis
+datdf <- datset %>%
+  select(-c(id,recorded_by,scheme_name,num_private,extraction_type_group,
+            extraction_type_class,payment,region_code,district_code,source_type,
+            source_class,waterpoint_type_group,quality_group,lga,ward))
+
+# replace all NA's with unknown (note: other was used in different variables)
+datdf<- datdf %>%
+  replace(is.na(.),"unknown")
+
+# Change data type to specific predictors
+datdf <- transform(
+  datdf,
+  status_group = as.factor(status_group),
+  date_recorded = as.Date(date_recorded),
+  construction_year = as.Date( construction_year,"%Y", origin = "1960"),
+  basin = as.factor(basin),
+  public_meeting = as.factor(public_meeting))
+
+str(datdf)
+```
+
+```{r - Train Model}
+
+split <- initial_split(datdf)
+
+train <- training(split)
+test <- testing(split)
+
+rf_engine <- rand_forest(
+  mode = 'classification', mtry = NULL, trees= NULL, min_n= NULL) %>%
+  set_engine('randomForest')
+
+rf_workflow <- workflow() %>%
+  add_model(rf_engine) %>%
+  add_formula(status_group~.)
+
+results<-rf_workflow %>%
+  fit(train) %>%
+  predict(test) %>%
+  bind_cols(test)%>%
+  conf_mat(estimate=.pred_class,truth=status_group)
+
+results
+
+```
+
+```{r- Tune hyperparameters}
+tune_spec <-rand_forest(
+  mode = 'classification',mtry= tune(),trees= 1000, min_n= tune()) %>%
+  set_engine('randomForest')
+       
+
+tune_wf <- workflow() %>%
+  add_model(tune_spec)%>%
+  add_formula(status_group~.)
+
+folds <- vfold_cv(train,v=5)
+
+tune_res <- tune_grid(
+  tune_wf, resamples = folds, grid = 10)
+
+tune_res
+
+
+```
+
+
+
+
+
