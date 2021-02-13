@@ -193,7 +193,7 @@ results
 
 ```
 
-```{r- Tune hyperparameters}
+```{r - Tune hyperparameters}
 tune_spec <-rand_forest(
   mode = 'classification',mtry= tune(),trees= 1000, min_n= tune()) %>%
   set_engine('randomForest')
