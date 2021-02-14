@@ -124,10 +124,6 @@ datset%>%
   select(water_quality,quality_group)%>%
   table()
 
-```
-
-
-```{r -Sorces review of commonality}
 # Source is most granular with sources_type and source_class being subsets
 datset%>%
   select(source,source_type)%>%
@@ -139,9 +135,7 @@ datset%>%
 
 datset %>%
   select(source_type,source_class) %>%
-  table
-
-
+  table ()
 ```
 
 
@@ -150,7 +144,8 @@ datset %>%
 datdf <- datset %>%
   select(-c(id,recorded_by,scheme_name,num_private,extraction_type_group,
             extraction_type_class,payment,region_code,district_code,source_type,
-            source_class,waterpoint_type_group,quality_group,lga,ward))
+            source_class,waterpoint_type_group,quality_group,lga,ward,latitude,longitude,
+            construction_year,date_recorded,subvillage))
 
 # replace all NA's with unknown (note: other was used in different variables)
 datdf<- datdf %>%
@@ -160,8 +155,6 @@ datdf<- datdf %>%
 datdf <- transform(
   datdf,
   status_group = as.factor(status_group),
-  date_recorded = as.Date(date_recorded),
-  construction_year = as.Date( construction_year,"%Y", origin = "1960"),
   basin = as.factor(basin),
   public_meeting = as.factor(public_meeting))
 
@@ -195,23 +188,45 @@ results
 
 ```{r - Tune hyperparameters}
 tune_spec <-rand_forest(
-  mode = 'classification',mtry= tune(),trees= 1000, min_n= tune()) %>%
+  mode = 'classification',mtry= tune(),trees= NULL, min_n= tune()) %>%
   set_engine('randomForest')
-       
 
 tune_wf <- workflow() %>%
   add_model(tune_spec)%>%
   add_formula(status_group~.)
 
-folds <- vfold_cv(train,v=5)
+folds <- vfold_cv(train, v=5)
+
+folds
 
 tune_res <- tune_grid(
   tune_wf, resamples = folds, grid = 10)
 
 tune_res
 
+```
+
+
+
+```{r}
+library(tidyr)
+
+tune_res %>%
+  collect_metrics() %>%
+  filter(.metric == "roc_auc") %>%
+  select(mean,min_n,mtry) %>%
+  pivot_longer(min_n:mtry,
+               names_to = "parameter",
+               values_to = "value") %>%
+  ggplot(aes(value,mean, color= parameter)) +
+  geom_point(show.legend = FALSE) +
+  facet_wrap(~parameter,scales = "free_x") +
+  labs(x=NULL, y="AUC")
+         
+                    
 
 ```
+
 
 
 
