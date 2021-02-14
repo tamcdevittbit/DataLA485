@@ -208,7 +208,7 @@ tune_res
 
 
 
-```{r}
+```{r - inital review of tuneing data}
 library(tidyr)
 
 tune_res %>%
@@ -223,11 +223,84 @@ tune_res %>%
   facet_wrap(~parameter,scales = "free_x") +
   labs(x=NULL, y="AUC")
          
-                    
-
 ```
 
+```{r - Narrow down tuning parms}
+  
+rf_grid <- grid_regular(
+  mtry(range = c(7,12)),
+  min_n(range = c(20,40)),
+  levels = 5)
 
+rf_grid
+
+regular_res <- tune_grid(
+  tune_wf,
+  resample = folds,
+  grid = rf_grid)
+
+regular_res
+```
+
+```{r - Review and best selection}
+
+regular_res %>%
+  collect_metrics() %>%
+  filter(.metric=="roc_auc") %>%
+  mutate(min_n = factor(min_n)) %>%
+  ggplot(aes(mtry,mean, color = min_n))+
+  geom_line(alpha=0.5, size = 1.5) +
+  geom_point()+
+  labs(y="AUC")
+  
+
+best_auc <- select_best(regular_res,"roc_auc")
+
+final_rf <- finalize_model(
+  tune_spec,
+  best_auc)
+
+library(vip)
+
+final_rf %>%
+  set_engine("randomForest", imprtance = "permutation") %>%
+  fit( status_group~.,
+       data= train) %>% 
+  vip(geom= "point")
+  
+
+```
+```{r - Final model}
+
+final_workflow <- workflow() %>%
+  add_model(final_rf) %>%
+  add_formula(status_group~.)
+
+final_res <- final_workflow %>%
+  last_fit(split)
+
+final_res %>%
+  collect_metrics()
+
+rf_eng <- rand_forest(
+  mode = 'classification', mtry= 7, trees= NULL, min_n=20 ) %>%
+  set_engine('randomForest')
+
+rf_final_wf <- workflow() %>%
+add_model(rf_eng) %>%
+  add_formula(status_group~.)
+
+final_res <- final_workflow %>%
+  fit(train) %>%
+  predict(test) %>%
+  bind_cols(test)%>%
+  conf_mat(estimate=.pred_class,truth=status_group)
+
+final_res
+
+
+
+```
 
 
 
