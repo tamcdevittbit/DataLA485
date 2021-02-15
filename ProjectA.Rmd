@@ -1,6 +1,8 @@
 ---
 title: "R Notebook"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
@@ -55,12 +57,6 @@ unique<-datset%>%
 
 # large percentage of NAs in $scheme_name (~47.4%)
  28166/59400 *100
-
-# datset%>%
-#   mutate(funder=replace_na(funder,"other"))%>%
-#   map(., ~str_c(length(unique(.x)),collapse=',')) %>%
-#   bind_rows() %>%
-#   gather(key = col_name, value= col_unique)
 
 # plot status_group by count
 datset %>%
@@ -228,8 +224,8 @@ tune_res %>%
 ```{r - Narrow down tuning parms}
   
 rf_grid <- grid_regular(
-  mtry(range = c(7,12)),
-  min_n(range = c(20,40)),
+  mtry(range = c(5,10)),
+  min_n(range = c(10,20)),
   levels = 5)
 
 rf_grid
@@ -283,7 +279,7 @@ final_res %>%
   collect_metrics()
 
 rf_eng <- rand_forest(
-  mode = 'classification', mtry= 7, trees= NULL, min_n=20 ) %>%
+  mode = 'classification', mtry= 5, trees= NULL, min_n= 10 ) %>%
   set_engine('randomForest')
 
 rf_final_wf <- workflow() %>%
@@ -301,6 +297,60 @@ final_res
 
 
 ```
+
+
+```{r - Data Wrangling of test set}
+
+testset <- read.csv("./testset.csv",header = TRUE,stringsAsFactors = FALSE)
+
+# remove the variables that are duplicate, subsets, or not used in analysis
+testdf <- testset %>%
+  select(-c(id,recorded_by,scheme_name,num_private,extraction_type_group,
+            extraction_type_class,payment,region_code,district_code,source_type,
+            source_class,waterpoint_type_group,quality_group,lga,ward,latitude,longitude,
+            construction_year,date_recorded,subvillage))
+
+# replace blanks with NAs
+testdf[,][testdf[,]==""] <-NA
+
+# replace all NA's with unknown (note: other was used in different variables)
+testdf<- testdf %>%
+  replace(is.na(.),"unknown")
+
+# Change data type to specific predictors
+testdf <- transform(
+  testdf,
+  basin = as.factor(basin),
+  public_meeting = as.factor(public_meeting))
+
+
+testdf$status_group <- "unknown"
+
+
+```
+
+
+```{r - final test results}
+
+test_res <- final_workflow %>%
+  fit(train) %>%
+  predict(testdf) %>%
+  bind_cols(testdf)
+
+test_res
+
+
+
+
+```
+
+```{r}
+
+write.csv(test_res,"./test_res.csv")
+
+
+```
+
 
 
 
